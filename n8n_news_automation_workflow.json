@@ -64,7 +64,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Bearer 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"
+              "value": "YOUR_GITHUB_TOKEN"
             },
             {
               "name": "Accept",
@@ -194,7 +194,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Bearer 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"
+              "value": "YOUR_GITHUB_TOKEN"
             },
             {
               "name": "Accept",
@@ -246,7 +246,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Bearer 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"
+              "value": "YOUR_GITHUB_TOKEN"
             },
             {
               "name": "Accept",
