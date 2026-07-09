@@ -29,7 +29,7 @@
     },
     {
       "parameters": {
-        "mode": "jsonToXml",
+        "mode": "xmlToJson",
         "options": {}
       },
       "id": "f58f001c-6d80-48b9-bc91-23ea27e2a9b2",
@@ -57,15 +57,11 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://api.github.com/repos/YOUR_GITHUB_USERNAME_HERE/YOUR_GITHUB_REPO_NAME_HERE/contents/public/articles.json",
+        "url": "https://api.github.com/repos/pinsarasasika/News-wesite/contents/public/articles.json",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "headerParameters": {
           "parameters": [
-            {
-              "name": "Authorization",
-              "value": "YOUR_GITHUB_TOKEN"
-            },
             {
               "name": "Accept",
               "value": "application/vnd.github.v3+json"
@@ -95,10 +91,10 @@
     },
     {
       "parameters": {
-        "jsCode": "// Decode current articles list\nlet currentArticles = [];\ntry {\n  const contentBase64 = $input.item.json.content;\n  // Handle UTF-8 safely in n8n/Node.js\n  const contentString = Buffer.from(contentBase64, 'base64').toString('utf-8');\n  currentArticles = JSON.parse(contentString);\n} catch (e) {\n  // Fallback to empty if file not found/malformed\n}\n\n// Get RSS Item details\nconst rssTitle = $('Extract RSS Feed Items').item.json.title;\nconst rssDescription = $('Extract RSS Feed Items').item.json.description;\nconst rssLink = $('Extract RSS Feed Items').item.json.link;\nconst rssPubDate = $('Extract RSS Feed Items').item.json.pubDate;\nconst sha = $input.item.json.sha; // Save current SHA to use during the update\n\n// Check if this article was already imported\nconst alreadyExists = currentArticles.some(art => \n  art.title.toLowerCase().trim() === rssTitle.toLowerCase().trim() ||\n  (art.tags && art.tags.includes(rssLink)) ||\n  art.content.includes(rssLink)\n);\n\nreturn {\n  json: {\n    rssTitle,\n    rssDescription,\n    rssLink,\n    rssPubDate,\n    sha,\n    alreadyExists,\n    currentArticlesCount: currentArticles.length\n  }\n};"
+        "jsCode": "// Decode current articles list\nlet currentArticles = [];\ntry {\n  const contentBase64 = $input.item.json.content;\n  const contentString = Buffer.from(contentBase64, 'base64').toString('utf-8');\n  currentArticles = JSON.parse(contentString);\n} catch (e) {\n  // Fallback to empty if file not found/malformed\n}\n\n// Get RSS Item details\nconst rssTitle = $('Extract RSS Feed Items').item.json.title;\nconst rssDescription = $('Extract RSS Feed Items').item.json.description;\nconst rssLink = $('Extract RSS Feed Items').item.json.link;\nconst rssPubDate = $('Extract RSS Feed Items').item.json.pubDate;\nconst sha = $input.item.json.sha; // Save current SHA to use during the update\n\n// Check if this article was already imported\nconst alreadyExists = currentArticles.some(art => \n  (art.title && art.title.toLowerCase().trim() === rssTitle.toLowerCase().trim()) ||\n  (art.tags && art.tags.includes(rssLink)) ||\n  (art.content && art.content.includes(rssLink))\n);\n\n// If duplicate, return an empty list to naturally stop n8n branch execution\nif (alreadyExists) {\n  return [];\n}\n\nreturn {\n  json: {\n    rssTitle,\n    rssDescription,\n    rssLink,\n    rssPubDate,\n    sha,\n    currentArticlesCount: currentArticles.length\n  }\n};"
       },
       "id": "d748de7f-1d4e-4f36-9694-de4db9a6a8b5",
-      "name": "Check for Duplicates",
+      "name": "Filter Duplicate Articles",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -108,94 +104,43 @@
     },
     {
       "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
-          "conditions": [
-            {
-              "id": "a679796e-a22c-47b8-bde8-d7b13eb80dfa",
-              "leftValue": "={{$json.alreadyExists}}",
-              "rightValue": true,
-              "operator": "isNotTrue"
-            }
-          ],
-          "combinator": "and"
-        },
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=YOUR_GEMINI_API_KEY",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": \"You are an expert AI journalist editing articles for 'Chronicle Live'.\\nRewrite the following raw news article into an original, engaging, high-quality, and detailed news story in your own words. Do not copy sentences verbatim from the source description.\\n\\nRaw Source Title: {{$json.rssTitle}}\\nRaw Source Description: {{$json.rssDescription}}\\nSource Link: {{$json.rssLink}}\\n\\nWrite a fully structured article. Return ONLY a valid raw JSON object. Do not wrap the JSON output in markdown formatting like ```json or ```, and do not write any introductory or explanatory text. The output must be exactly parseable as JSON matching this schema:\\n{\\n  \\\"title\\\": \\\"Catchy, original headline\\\",\\n  \\\"excerpt\\\": \\\"Compelling 1-2 sentence preview summary\\\",\\n  \\\"content\\\": \\\"Detailed story content with paragraphs, formatted in standard Markdown (3-4 paragraphs)\\\",\\n  \\\"category\\\": \\\"World\\\" or \\\"Tech\\\" or \\\"Business\\\" or \\\"Sports\\\" or \\\"Entertainment\\\" or \\\"Lifestyle\\\",\\n  \\\"tags\\\": [\\\"keyword1\\\", \\\"keyword2\\\", \\\"tag3\\\"]\\n}\"\n        }\n      ]\n    }\n  ]\n}",
         "options": {}
       },
-      "id": "5cd9b2c3-42e1-4c6b-952b-10cbde608821",
-      "name": "Filter Duplicate Articles",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
+      "id": "b3e0cb9d-bb8e-4a6f-a496-d8bb412e8790",
+      "name": "Generate Article with Gemini",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
       "position": [
-        1460,
+        1520,
         240
       ]
     },
     {
       "parameters": {
-        "modelName": "gemini-2.5-flash",
-        "options": {
-          "temperature": 0.7
-        }
-      },
-      "id": "1d6c810d-27b5-4b05-bb2a-b732bc9c7e0c",
-      "name": "Google Gemini Model (Free Tier)",
-      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
-      "typeVersion": 1,
-      "position": [
-        1600,
-        420
-      ],
-      "credentials": {
-        "googleAnswersApi": {
-          "id": "gemini-api-cred",
-          "name": "Google AI Studio API Key"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "promptType": "define",
-        "text": "=You are an expert AI journalist editing articles for 'Chronicle Live'.\nRewrite the following raw news article into an original, engaging, high-quality, and detailed news story in your own words. Do not copy sentences verbatim from the source description.\n\nRaw Source Title: {{$json.rssTitle}}\nRaw Source Description: {{$json.rssDescription}}\nSource Link: {{$json.rssLink}}\n\nWrite a fully structured article. Return ONLY a valid raw JSON object. Do not wrap the JSON output in markdown formatting like ```json or ```, and do not write any introductory or explanatory text. The output must be exactly parseable as JSON matching this schema:\n{\n  \"title\": \"Catchy, original headline\",\n  \"excerpt\": \"Compelling 1-2 sentence preview summary\",\n  \"content\": \"Detailed story content with paragraphs, formatted in standard Markdown (3-4 paragraphs)\",\n  \"category\": \"World\" or \"Tech\" or \"Business\" or \"Sports\" or \"Entertainment\" or \"Lifestyle\",\n  \"tags\": [\"keyword1\", \"keyword2\", \"tag3\"]\n}"
-      },
-      "id": "b3e0cb9d-bb8e-4a6f-a496-d8bb412e8790",
-      "name": "Generate Article with Gemini",
-      "type": "@n8n/n8n-nodes-langchain.chainLlm",
-      "typeVersion": 1.4,
-      "position": [
-        1680,
-        220
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const aiResponseText = $input.item.json.text;\nlet aiData = {};\n\ntry {\n  // Clean JSON output if AI added markdown fences\n  let cleanJson = aiResponseText.trim();\n  if (cleanJson.startsWith('```json')) {\n    cleanJson = cleanJson.substring(7);\n  }\n  if (cleanJson.startsWith('```')) {\n    cleanJson = cleanJson.substring(3);\n  }\n  if (cleanJson.endsWith('```')) {\n    cleanJson = cleanJson.substring(0, cleanJson.length - 3);\n  }\n  aiData = JSON.parse(cleanJson.trim());\n} catch (e) {\n  // Fallback if parsing failed\n  aiData = {\n    title: $('Filter Duplicate Articles').item.json.rssTitle,\n    excerpt: $('Filter Duplicate Articles').item.json.rssDescription.slice(0, 100) + '...',\n    content: $('Filter Duplicate Articles').item.json.rssDescription,\n    category: 'World',\n    tags: ['Breaking', 'News']\n  };\n}\n\n// Set up curated premium Unsplash images to keep the project completely free\nconst categoryImages = {\n  World: [\n    \"https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&w=800&q=80\",\n    \"https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=800&q=80\"\n  ],\n  Tech: [\n    \"https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=800&q=80\",\n    \"https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=800&q=80\"\n  ],\n  Business: [\n    \"https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=800&q=80\",\n    \"https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?auto=format&fit=crop&w=800&q=80\"\n  ],\n  Sports: [\n    \"https://images.unsplash.com/photo-1461896836934-ffe607ba8211?auto=format&fit=crop&w=800&q=80\",\n    \"https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=800&q=80\"\n  ],\n  Entertainment: [\n    \"https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=800&q=80\",\n    \"https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=800&q=80\"\n  ],\n  Lifestyle: [\n    \"https://images.unsplash.com/photo-1511556532299-8f662fc26c06?auto=format&fit=crop&w=800&q=80\",\n    \"https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=800&q=80\"\n  ]\n};\n\nconst category = aiData.category || 'World';\nconst images = categoryImages[category] || categoryImages.World;\nconst randomImage = images[Math.floor(Math.random() * images.length)];\n\n// Generate a unique URL identifier\nconst id = aiData.title.toLowerCase()\n  .replace(/[^a-z0-9]+/g, '-')\n  .replace(/(^-|-$)/g, '') || `news-${Date.now()}`;\n\n// Inject source link in tags for verification & duplicate checking later\nconst sourceLink = $('Filter Duplicate Articles').item.json.rssLink;\nconst finalTags = Array.isArray(aiData.tags) ? aiData.tags : ['News'];\nif (!finalTags.includes(sourceLink)) {\n  finalTags.push(sourceLink);\n}\n\n// Create the final structured article object\nconst article = {\n  id,\n  title: aiData.title,\n  excerpt: aiData.excerpt,\n  content: aiData.content + `\\n\\n*Source: BBC News Syndicate*`,\n  category,\n  imageUrl: randomImage,\n  imageCaption: `AI-illustrated coverage for: ${aiData.title}`,\n  author: \"Gemini Auto-Editor\",\n  publishedAt: new Date().toISOString(),\n  readTime: `${Math.max(1, Math.ceil(aiData.content.split(/\\s+/).length / 200))} min read`,\n  isBreaking: false,\n  isHot: true,\n  tags: finalTags,\n  views: Math.floor(Math.random() * 80) + 12\n};\n\nreturn {\n  json: {\n    article,\n    sha: $('Filter Duplicate Articles').item.json.sha\n  }\n};"
+        "jsCode": "const aiResponseText = $input.item.json.candidates[0].content.parts[0].text;\nlet aiData = {};\n\ntry {\n  // Clean JSON output if AI added markdown fences\n  let cleanJson = aiResponseText.trim();\n  if (cleanJson.startsWith('```json')) {\n    cleanJson = cleanJson.substring(7);\n  }\n  if (cleanJson.startsWith('```')) {\n    cleanJson = cleanJson.substring(3);\n  }\n  if (cleanJson.endsWith('```')) {\n    cleanJson = cleanJson.substring(0, cleanJson.length - 3);\n  }\n  aiData = JSON.parse(cleanJson.trim());\n} catch (e) {\n  // Fallback if parsing failed\n  aiData = {\n    title: $('Filter Duplicate Articles').item.json.rssTitle,\n    excerpt: $('Filter Duplicate Articles').item.json.rssDescription.slice(0, 100) + '...',\n    content: $('Filter Duplicate Articles').item.json.rssDescription,\n    category: 'World',\n    tags: ['Breaking', 'News']\n  };\n}\n\n// Set up curated premium Unsplash images to keep the project completely free\nconst categoryImages = {\n  World: [\n    \"https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&w=800&q=80\",\n    \"https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=800&q=80\"\n  ],\n  Tech: [\n    \"https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=800&q=80\",\n    \"https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=800&q=80\"\n  ],\n  Business: [\n    \"https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=800&q=80\",\n    \"https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?auto=format&fit=crop&w=800&q=80\"\n  ],\n  Sports: [\n    \"https://images.unsplash.com/photo-1461896836934-ffe607ba8211?auto=format&fit=crop&w=800&q=80\",\n    \"https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=800&q=80\"\n  ],\n  Entertainment: [\n    \"https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=800&q=80\",\n    \"https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=800&q=80\"\n  ],\n  Lifestyle: [\n    \"https://images.unsplash.com/photo-1511556532299-8f662fc26c06?auto=format&fit=crop&w=800&q=80\",\n    \"https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=800&q=80\"\n  ]\n};\n\nconst category = aiData.category || 'World';\nconst images = categoryImages[category] || categoryImages.World;\nconst randomImage = images[Math.floor(Math.random() * images.length)];\n\n// Generate a unique URL identifier\nconst id = aiData.title.toLowerCase()\n  .replace(/[^a-z0-9]+/g, '-')\n  .replace(/(^-|-$)/g, '') || `news-${Date.now()}`;\n\n// Inject source link in tags for verification & duplicate checking later\nconst sourceLink = $('Filter Duplicate Articles').item.json.rssLink;\nconst finalTags = Array.isArray(aiData.tags) ? aiData.tags : ['News'];\nif (!finalTags.includes(sourceLink)) {\n  finalTags.push(sourceLink);\n}\n\n// Create the final structured article object\nconst article = {\n  id,\n  title: aiData.title,\n  excerpt: aiData.excerpt,\n  content: aiData.content + `\\n\\n*Source: BBC News Syndicate*`,\n  category,\n  imageUrl: randomImage,\n  imageCaption: `AI-illustrated coverage for: ${aiData.title}`,\n  author: \"Gemini Auto-Editor\",\n  publishedAt: new Date().toISOString(),\n  readTime: `${Math.max(1, Math.ceil(aiData.content.split(/\\s+/).length / 200))} min read`,\n  isBreaking: false,\n  isHot: true,\n  tags: finalTags,\n  views: Math.floor(Math.random() * 80) + 12\n};\n\nreturn {\n  json: {\n    article,\n    sha: $('Filter Duplicate Articles').item.json.sha\n  }\n};"
       },
       "id": "e7fb783d-e6b7-4c07-ae7c-26d96e4ea475",
       "name": "Build Article Object & Select Visuals",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1880,
-        220
+        1740,
+        240
       ]
     },
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://api.github.com/repos/YOUR_GITHUB_USERNAME_HERE/YOUR_GITHUB_REPO_NAME_HERE/contents/public/articles.json",
+        "url": "https://api.github.com/repos/pinsarasasika/News-wesite/contents/public/articles.json",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "headerParameters": {
           "parameters": [
-            {
-              "name": "Authorization",
-              "value": "YOUR_GITHUB_TOKEN"
-            },
             {
               "name": "Accept",
               "value": "application/vnd.github.v3+json"
@@ -213,8 +158,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.1,
       "position": [
-        2060,
-        220
+        1960,
+        240
       ],
       "credentials": {
         "httpHeaderAuth": {
@@ -232,22 +177,18 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2240,
-        220
+        2160,
+        240
       ]
     },
     {
       "parameters": {
         "method": "PUT",
-        "url": "=https://api.github.com/repos/YOUR_GITHUB_USERNAME_HERE/YOUR_GITHUB_REPO_NAME_HERE/contents/public/articles.json",
+        "url": "https://api.github.com/repos/pinsarasasika/News-wesite/contents/public/articles.json",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "headerParameters": {
           "parameters": [
-            {
-              "name": "Authorization",
-              "value": "YOUR_GITHUB_TOKEN"
-            },
             {
               "name": "Accept",
               "value": "application/vnd.github.v3+json"
@@ -268,8 +209,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.1,
       "position": [
-        2420,
-        220
+        2360,
+        240
       ],
       "credentials": {
         "httpHeaderAuth": {
@@ -328,17 +269,6 @@
       "main": [
         [
           {
-            "node": "Check for Duplicates",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Check for Duplicates": {
-      "main": [
-        [
-          {
             "node": "Filter Duplicate Articles",
             "type": "main",
             "index": 0
@@ -352,17 +282,6 @@
           {
             "node": "Generate Article with Gemini",
             "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Google Gemini Model (Free Tier)": {
-      "ai_languageModel": [
-        [
-          {
-            "node": "Generate Article with Gemini",
-            "type": "ai_languageModel",
             "index": 0
           }
         ]
